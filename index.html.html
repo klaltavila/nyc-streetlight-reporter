@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NYC Streetlight Reporter</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --black: #0a0a0a;
+    --yellow: #f5c400;
+    --red: #e8341c;
+    --green: #1db954;
+    --white: #f0ede6;
+    --gray: #2a2a2a;
+    --mid: #444;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--black);
+    color: var(--white);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  header {
+    background: var(--black);
+    border-bottom: 2px solid var(--yellow);
+    padding: 0 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    height: 56px;
+    flex-shrink: 0;
+    z-index: 1000;
+    position: relative;
+  }
+
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 2px;
+    color: var(--yellow);
+    white-space: nowrap;
+  }
+
+  .logo span { color: var(--white); }
+
+  .subtitle {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--mid);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+
+  .header-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .stat-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    letter-spacing: 0.5px;
+  }
+  .stat-badge.open { background: rgba(232,52,28,0.15); border: 1px solid var(--red); color: var(--red); }
+  .stat-badge.fixed { background: rgba(29,185,84,0.15); border: 1px solid var(--green); color: var(--green); }
+
+  #search-bar {
+    display: flex;
+    align-items: center;
+    background: var(--gray);
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    overflow: hidden;
+    width: 280px;
+  }
+
+  #search-input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--white);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 7px 12px;
+    flex: 1;
+  }
+
+  #search-input::placeholder { color: var(--mid); }
+
+  #search-btn {
+    background: var(--yellow);
+    border: none;
+    cursor: pointer;
+    padding: 7px 12px;
+    color: var(--black);
+    font-size: 14px;
+    transition: background 0.2s;
+  }
+  #search-btn:hover { background: #ffd700; }
+
+  .instructions {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--mid);
+    letter-spacing: 0.5px;
+  }
+
+  #map {
+    flex: 1;
+    width: 100%;
+  }
+
+  /* Custom marker icons */
+  .pin-red, .pin-green {
+    width: 28px;
+    height: 36px;
+    position: relative;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+
+  .modal {
+    background: var(--black);
+    border: 1px solid var(--yellow);
+    border-radius: 4px;
+    padding: 28px 32px;
+    width: 420px;
+    max-width: 95vw;
+    position: relative;
+    animation: slideUp 0.2s ease;
+  }
+
+  @keyframes slideUp {
+    from { transform: translateY(20px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .modal h2 {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 2px;
+    color: var(--yellow);
+    margin-bottom: 6px;
+  }
+
+  .modal p {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    line-height: 1.5;
+  }
+
+  .modal select, .modal input {
+    width: 100%;
+    background: var(--gray);
+    border: 1px solid #3a3a3a;
+    border-radius: 3px;
+    color: var(--white);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    outline: none;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+
+  .modal select:focus, .modal input:focus {
+    border-color: var(--yellow);
+  }
+
+  .modal select option { background: var(--black); }
+
+  .select-wrapper {
+    position: relative;
+  }
+  .select-wrapper::after {
+    content: '▾';
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-70%);
+    color: var(--yellow);
+    pointer-events: none;
+    font-size: 14px;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 6px;
+  }
+
+  .btn {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 10px 22px;
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-primary { background: var(--yellow); color: var(--black); }
+  .btn-primary:hover { background: #ffd700; transform: translateY(-1px); }
+  .btn-secondary { background: transparent; color: var(--white); border: 1px solid #3a3a3a; }
+  .btn-secondary:hover { border-color: var(--white); }
+  .btn-danger { background: var(--red); color: var(--white); }
+  .btn-danger:hover { background: #ff4422; }
+  .btn-success { background: var(--green); color: var(--black); }
+  .btn-success:hover { background: #22dd66; }
+
+  .close-btn {
+    position: absolute;
+    top: 14px; right: 16px;
+    background: none; border: none;
+    color: var(--mid); font-size: 18px;
+    cursor: pointer; line-height: 1;
+  }
+  .close-btn:hover { color: var(--white); }
+
+  /* Pin info popup (leaflet popup styled) */
+  .leaflet-popup-content-wrapper {
+    background: var(--black) !important;
+    border: 1px solid var(--yellow) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.6) !important;
+    padding: 0 !important;
+  }
+
+  .leaflet-popup-tip-container { display: none; }
+
+  .leaflet-popup-content {
+    margin: 0 !important;
+    width: 280px !important;
+  }
+
+  .popup-inner {
+    padding: 18px 20px;
+  }
+
+  .popup-status-badge {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 2px;
+    margin-bottom: 10px;
+  }
+  .popup-status-badge.open { background: rgba(232,52,28,0.2); border: 1px solid var(--red); color: var(--red); }
+  .popup-status-badge.fixed { background: rgba(29,185,84,0.2); border: 1px solid var(--green); color: var(--green); }
+
+  .popup-type {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--white);
+    margin-bottom: 10px;
+    line-height: 1.3;
+  }
+
+  .popup-meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: #888;
+    margin-bottom: 14px;
+    line-height: 1.8;
+  }
+
+  .popup-meta span { color: var(--white); }
+
+  .popup-btn {
+    width: 100%;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 9px;
+    background: var(--yellow);
+    color: var(--black);
+    border: none;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .popup-btn:hover { background: #ffd700; }
+  .popup-btn:disabled { background: #333; color: #666; cursor: default; }
+
+  .leaflet-popup-close-button {
+    color: #555 !important;
+    font-size: 18px !important;
+    top: 8px !important;
+    right: 10px !important;
+  }
+
+  /* Confirm dialog */
+  .confirm-text {
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    color: var(--white);
+    margin-bottom: 20px;
+    line-height: 1.6;
+  }
+
+  label.field-label {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: #888;
+    margin-bottom: 5px;
+  }
+
+  .required-note {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--mid);
+    margin-bottom: 16px;
+  }
+
+  .error-msg {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--red);
+    margin-top: -10px;
+    margin-bottom: 10px;
+    display: none;
+  }
+
+  .mode-indicator {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(245, 196, 0, 0.95);
+    color: var(--black);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    padding: 10px 20px;
+    border-radius: 3px;
+    z-index: 999;
+    display: none;
+    cursor: pointer;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 4px 20px rgba(245,196,0,0.3); }
+    50% { box-shadow: 0 4px 30px rgba(245,196,0,0.7); }
+  }
+
+  /* Leaflet dark override */
+  .leaflet-control-zoom a {
+    background: var(--gray) !important;
+    color: var(--white) !important;
+    border-color: #3a3a3a !important;
+  }
+  .leaflet-control-zoom a:hover {
+    background: var(--mid) !important;
+  }
+
+  .leaflet-control-attribution {
+    background: rgba(10,10,10,0.8) !important;
+    color: #555 !important;
+    font-size: 9px !important;
+  }
+
+  /* Location confirm panel */
+  #location-confirm {
+    display: none;
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--black);
+    border: 1px solid var(--yellow);
+    border-radius: 4px;
+    padding: 14px 20px;
+    z-index: 1200;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.7);
+    min-width: 340px;
+    animation: slideUp 0.2s ease;
+    text-align: center;
+  }
+
+  #location-confirm.visible { display: block; }
+
+  #location-confirm .lc-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: var(--yellow);
+    margin-bottom: 4px;
+  }
+
+  #location-confirm .lc-coords {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--mid);
+    margin-bottom: 14px;
+  }
+
+  #location-confirm .lc-btns {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+
+  .report-btn-header {
+    background: var(--yellow);
+    color: var(--black);
+    border: none;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 8px 16px;
+    border-radius: 2px;
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+  .report-btn-header:hover { background: #ffd700; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">NYC <span>Streetlight</span> Reporter</div>
+    <div class="subtitle">Report broken streetlights · Track repairs</div>
+  </div>
+  <div id="search-bar">
+    <input type="text" id="search-input" placeholder="Search NYC address...">
+    <button id="search-btn">🔍</button>
+  </div>
+  <button class="report-btn-header" id="toggle-report-mode">＋ Report a Problem</button>
+  <div class="header-right">
+    <div class="stat-badge open" id="open-count">● 0 Open</div>
+    <div class="stat-badge fixed" id="fixed-count">✓ 0 Fixed</div>
+  </div>
+</header>
+
+<div id="map"></div>
+<div class="mode-indicator" id="mode-indicator">📍 Click on the map to place a pin — Press ESC to cancel</div>
+
+<!-- Location confirmation panel -->
+<div id="location-confirm">
+  <div class="lc-title">📍 Confirm Pin Location</div>
+  <div class="lc-coords" id="lc-coords"></div>
+  <div class="lc-btns">
+    <button class="btn btn-secondary" onclick="undoPin()" style="font-size:11px;padding:8px 18px;">↩ Undo</button>
+    <button class="btn btn-primary" onclick="confirmPinLocation()" style="font-size:11px;padding:8px 18px;">Confirm Location →</button>
+  </div>
+</div>
+
+<!-- Modal: Add Pin -->
+<div class="modal-overlay" id="add-modal">
+  <div class="modal">
+    <button class="close-btn" onclick="closeModal('add-modal')">✕</button>
+    <h2>Report a Streetlight Problem</h2>
+    <p>Select the issue type for this location.</p>
+    <div class="select-wrapper">
+      <select id="issue-select">
+        <option value="">— Select issue type —</option>
+        <optgroup label="Streetlight Issues">
+          <option>Burned-out Streetlight</option>
+          <option>Streetlight stays lit during the day</option>
+          <option>Streetlight goes on and off</option>
+          <option>Missing Streetlight</option>
+          <option>Dim Streetlight</option>
+          <option>Multiple Day Burners</option>
+        </optgroup>
+        <optgroup label="Flood Light Issues">
+          <option>Flood Light Out</option>
+          <option>Flood Light Day Burning</option>
+          <option>Flood Light Cycling</option>
+          <option>Flood Light Missing</option>
+          <option>Flood Light Dim</option>
+        </optgroup>
+        <optgroup label="Lamp Post Issues">
+          <option>Missing Lamp Post</option>
+          <option>Leaning Lamp Post</option>
+          <option>Damaged Lamp Post</option>
+          <option>Downed Lamp Post</option>
+        </optgroup>
+        <optgroup label="Electrical & Fixture Issues">
+          <option>Exposed Electrical Wires</option>
+          <option>Damaged Light Fixture</option>
+          <option>Missing Light Fixture</option>
+          <option>Opened Light Fixture</option>
+          <option>Hanging Light Fixture</option>
+          <option>Light shining in the wrong direction</option>
+        </optgroup>
+        <optgroup label="Glass Cover Issues">
+          <option>Broken Glass Cover</option>
+          <option>Missing Glass Cover</option>
+          <option>Hanging Glass Cover</option>
+          <option>Fire Globe Missing</option>
+        </optgroup>
+        <optgroup label="Base Door Issues">
+          <option>Missing door on the lamp post base</option>
+          <option>Opened door on the lamp post base</option>
+          <option>Damaged door on the lamp post base</option>
+        </optgroup>
+        <optgroup label="Bracket Arm Issues">
+          <option>Bracket Arm Missing</option>
+          <option>Bracket Arm Broken</option>
+          <option>Bracket Arm Loose</option>
+          <option>Bracket Arm Bent</option>
+        </optgroup>
+      </select>
+    </div>
+    <div id="add-error" class="error-msg">Please select an issue type.</div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="undoPin(); closeModal('add-modal')">Cancel</button>
+      <button class="btn btn-primary" onclick="submitPin()">Place Pin</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirm Fix -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal">
+    <button class="close-btn" onclick="closeModal('confirm-modal')">✕</button>
+    <h2>Mark as Fixed?</h2>
+    <p class="confirm-text">Would you like to report this streetlight as <strong style="color:var(--green)">fixed</strong>?</p>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeModal('confirm-modal')">No</button>
+      <button class="btn btn-success" onclick="showEmailModal()">Yes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Email Input -->
+<div class="modal-overlay" id="email-modal">
+  <div class="modal">
+    <button class="close-btn" onclick="closeModal('email-modal')">✕</button>
+    <h2>Your Information</h2>
+    <p>Help us track who confirmed this fix.</p>
+    <label class="field-label">Email Address *</label>
+    <input type="email" id="fix-email" placeholder="you@example.com">
+    <div id="email-error" class="error-msg">A valid email address is required.</div>
+    <label class="field-label">First Name</label>
+    <input type="text" id="fix-first" placeholder="Optional">
+    <label class="field-label">Last Name</label>
+    <input type="text" id="fix-last" placeholder="Optional">
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="closeModal('email-modal')">Cancel</button>
+      <button class="btn btn-success" onclick="submitFix()">Submit</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== MAP INIT =====================
+const map = L.map('map', {
+  center: [40.7128, -74.0060],
+  zoom: 13,
+  zoomControl: true
+});
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO',
+  subdomains: 'abcd',
+  maxZoom: 20,
+  language: 'en'
+}).addTo(map);
+
+// ===================== STATE =====================
+let pins = JSON.parse(localStorage.getItem('nyc_pins') || '[]');
+let reportMode = false;
+let pendingLatLng = null;
+let activeMarkerId = null;
+let markers = {};
+
+// ===================== ICON FACTORY =====================
+function makeIcon(color) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="${color}" stroke="rgba(0,0,0,0.3)" stroke-width="1.5"/>
+    <circle cx="14" cy="14" r="6" fill="rgba(255,255,255,0.35)"/>
+    <circle cx="14" cy="14" r="3" fill="white"/>
+  </svg>`;
+  return L.divIcon({
+    html: svg,
+    className: '',
+    iconSize: [28, 40],
+    iconAnchor: [14, 40],
+    popupAnchor: [0, -42]
+  });
+}
+
+const redIcon = makeIcon('#e8341c');
+const greenIcon = makeIcon('#1db954');
+
+// ===================== FORMAT DATE =====================
+function formatDate(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' at ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
+// ===================== SAVE =====================
+function savePins() {
+  localStorage.setItem('nyc_pins', JSON.stringify(pins));
+  updateStats();
+}
+
+function updateStats() {
+  const open = pins.filter(p => p.status === 'open').length;
+  const fixed = pins.filter(p => p.status === 'fixed').length;
+  document.getElementById('open-count').textContent = `● ${open} Open`;
+  document.getElementById('fixed-count').textContent = `✓ ${fixed} Fixed`;
+}
+
+// ===================== RENDER PINS =====================
+function buildPopup(pin) {
+  if (pin.status === 'open') {
+    return `<div class="popup-inner">
+      <div class="popup-status-badge open">⚡ Problem Not Fixed</div>
+      <div class="popup-type">${pin.type}</div>
+      <div class="popup-meta">
+        Reported: <span>${formatDate(pin.createdAt)}</span><br>
+        Status: <span style="color:var(--red)">Unresolved</span>
+      </div>
+      <button class="popup-btn" onclick="openConfirmModal('${pin.id}')">Change Streetlight Status</button>
+    </div>`;
+  } else {
+    return `<div class="popup-inner">
+      <div class="popup-status-badge fixed">✓ Fixed</div>
+      <div class="popup-type">${pin.type}</div>
+      <div class="popup-meta">
+        Reported: <span>${formatDate(pin.createdAt)}</span><br>
+        Fixed on: <span style="color:var(--green)">${formatDate(pin.fixedAt)}</span><br>
+        By: <span>${pin.fixedBy || pin.fixedEmail}</span>
+      </div>
+      <button class="popup-btn" disabled>✓ Resolved</button>
+    </div>`;
+  }
+}
+
+function addMarkerToMap(pin) {
+  const icon = pin.status === 'open' ? redIcon : greenIcon;
+  const marker = L.marker([pin.lat, pin.lng], { icon });
+
+  let tooltip;
+  if (pin.status === 'open') {
+    tooltip = `Problem Not Fixed since: ${formatDate(pin.createdAt)}`;
+  } else {
+    tooltip = `Problem Fixed on: ${formatDate(pin.fixedAt)} · ${pin.fixedEmail}${pin.fixedBy ? ' · ' + pin.fixedBy : ''}`;
+  }
+
+  marker.bindTooltip(tooltip, { direction: 'top', offset: [0, -38], className: 'leaflet-tooltip' });
+  marker.bindPopup(buildPopup(pin), { maxWidth: 300 });
+  marker.addTo(map);
+  markers[pin.id] = marker;
+}
+
+function renderAllPins() {
+  // Clear existing
+  Object.values(markers).forEach(m => map.removeLayer(m));
+  markers = {};
+  pins.forEach(addMarkerToMap);
+}
+
+// ===================== REPORT MODE =====================
+document.getElementById('toggle-report-mode').addEventListener('click', () => {
+  reportMode = !reportMode;
+  const btn = document.getElementById('toggle-report-mode');
+  const indicator = document.getElementById('mode-indicator');
+  if (reportMode) {
+    btn.textContent = '✕ Cancel Report';
+    btn.style.background = '#e8341c';
+    btn.style.color = '#fff';
+    indicator.style.display = 'block';
+    map.getContainer().style.cursor = 'crosshair';
+  } else {
+    exitReportMode();
+  }
+});
+
+function exitReportMode() {
+  reportMode = false;
+  const btn = document.getElementById('toggle-report-mode');
+  btn.textContent = '＋ Report a Problem';
+  btn.style.background = '';
+  btn.style.color = '';
+  document.getElementById('mode-indicator').style.display = 'none';
+  map.getContainer().style.cursor = '';
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (reportMode) exitReportMode();
+    if (document.getElementById('location-confirm').classList.contains('visible')) undoPin();
+    closeModal('add-modal');
+    closeModal('confirm-modal');
+    closeModal('email-modal');
+  }
+});
+
+map.on('click', e => {
+  if (!reportMode) return;
+  pendingLatLng = e.latlng;
+  exitReportMode();
+
+  // Place a temporary ghost marker
+  if (window.tempMarker) map.removeLayer(window.tempMarker);
+  const ghostSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="#f5c400" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" opacity="0.8"/>
+    <circle cx="14" cy="14" r="6" fill="rgba(255,255,255,0.35)"/>
+    <circle cx="14" cy="14" r="3" fill="white"/>
+  </svg>`;
+  const ghostIcon = L.divIcon({ html: ghostSvg, className: '', iconSize: [28,40], iconAnchor: [14,40] });
+  window.tempMarker = L.marker(e.latlng, { icon: ghostIcon, zIndexOffset: 500 }).addTo(map);
+
+  // Show confirm panel with coords
+  const lat = e.latlng.lat.toFixed(5);
+  const lng = e.latlng.lng.toFixed(5);
+  document.getElementById('lc-coords').textContent = `${lat}, ${lng}`;
+  document.getElementById('location-confirm').classList.add('visible');
+});
+
+// ===================== ADD PIN =====================
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+function confirmPinLocation() {
+  document.getElementById('location-confirm').classList.remove('visible');
+  if (window.tempMarker) { map.removeLayer(window.tempMarker); window.tempMarker = null; }
+  openModal('add-modal');
+}
+
+function undoPin() {
+  document.getElementById('location-confirm').classList.remove('visible');
+  if (window.tempMarker) { map.removeLayer(window.tempMarker); window.tempMarker = null; }
+  pendingLatLng = null;
+}
+
+function submitPin() {
+  const sel = document.getElementById('issue-select');
+  const err = document.getElementById('add-error');
+  if (!sel.value) { err.style.display = 'block'; return; }
+  err.style.display = 'none';
+
+  const pin = {
+    id: Date.now().toString(),
+    lat: pendingLatLng.lat,
+    lng: pendingLatLng.lng,
+    type: sel.value,
+    status: 'open',
+    createdAt: new Date().toISOString()
+  };
+
+  pins.push(pin);
+  savePins();
+  addMarkerToMap(pin);
+  sel.value = '';
+  closeModal('add-modal');
+}
+
+// ===================== FIX PIN =====================
+function openConfirmModal(pinId) {
+  activeMarkerId = pinId;
+  map.closePopup();
+  openModal('confirm-modal');
+}
+
+function showEmailModal() {
+  closeModal('confirm-modal');
+  document.getElementById('fix-email').value = '';
+  document.getElementById('fix-first').value = '';
+  document.getElementById('fix-last').value = '';
+  document.getElementById('email-error').style.display = 'none';
+  openModal('email-modal');
+}
+
+function submitFix() {
+  const email = document.getElementById('fix-email').value.trim();
+  const err = document.getElementById('email-error');
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    err.style.display = 'block'; return;
+  }
+  err.style.display = 'none';
+
+  const first = document.getElementById('fix-first').value.trim();
+  const last = document.getElementById('fix-last').value.trim();
+  const fullName = [first, last].filter(Boolean).join(' ');
+
+  const pinIdx = pins.findIndex(p => p.id === activeMarkerId);
+  if (pinIdx === -1) return;
+
+  pins[pinIdx].status = 'fixed';
+  pins[pinIdx].fixedAt = new Date().toISOString();
+  pins[pinIdx].fixedEmail = email;
+  pins[pinIdx].fixedBy = fullName;
+
+  savePins();
+
+  // Update marker
+  const old = markers[activeMarkerId];
+  if (old) map.removeLayer(old);
+  delete markers[activeMarkerId];
+  addMarkerToMap(pins[pinIdx]);
+
+  closeModal('email-modal');
+  activeMarkerId = null;
+}
+
+// ===================== SEARCH =====================
+document.getElementById('search-btn').addEventListener('click', searchAddress);
+document.getElementById('search-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchAddress();
+});
+
+async function searchAddress() {
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) return;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&accept-language=en&q=${encodeURIComponent(q + ', New York City')}&limit=1&countrycodes=us&addressdetails=1`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en-US,en;q=0.9' } });
+    const data = await res.json();
+    if (data.length) {
+      const { lat, lon, address } = data[0];
+      map.setView([lat, lon], 17);
+
+      // Build a clean English address label
+      const parts = [];
+      if (address.house_number && address.road) parts.push(`${address.house_number} ${address.road}`);
+      else if (address.road) parts.push(address.road);
+      if (address.neighbourhood || address.suburb) parts.push(address.neighbourhood || address.suburb);
+      if (address.borough || address.city_district) parts.push(address.borough || address.city_district);
+      if (address.postcode) parts.push(address.postcode);
+      const label = parts.length ? parts.join(', ') : (address.road || q);
+
+      // Remove previous search marker if any
+      if (window.searchMarker) map.removeLayer(window.searchMarker);
+
+      window.searchMarker = L.circleMarker([lat, lon], {
+        radius: 8, color: '#f5c400', fillColor: '#f5c400', fillOpacity: 0.4, weight: 2
+      }).addTo(map);
+
+      window.searchMarker.bindPopup(`
+        <div style="font-family:'IBM Plex Mono',monospace;background:#0a0a0a;padding:4px 0;min-width:200px">
+          <div style="font-size:11px;color:#f5c400;line-height:1.5;margin-bottom:10px">${label}</div>
+          <button onclick="pinSearchLocation(${lat}, ${lon})" style="width:100%;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;letter-spacing:1px;text-transform:uppercase;padding:8px;background:#f5c400;color:#0a0a0a;border:none;border-radius:2px;cursor:pointer;">
+            📍 Report a Problem Here
+          </button>
+        </div>
+      `, { maxWidth: 260 }).openPopup();
+
+    } else {
+      alert('Address not found. Try a more specific NYC address.');
+    }
+  } catch {
+    alert('Search failed. Please try again.');
+  }
+}
+
+function pinSearchLocation(lat, lng) {
+  map.closePopup();
+  if (window.searchMarker) { map.removeLayer(window.searchMarker); window.searchMarker = null; }
+  pendingLatLng = { lat, lng };
+
+  // Show ghost pin at the searched location
+  if (window.tempMarker) map.removeLayer(window.tempMarker);
+  const ghostSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40">
+    <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26S28 24.5 28 14C28 6.27 21.73 0 14 0z" fill="#f5c400" stroke="rgba(0,0,0,0.3)" stroke-width="1.5" opacity="0.8"/>
+    <circle cx="14" cy="14" r="6" fill="rgba(255,255,255,0.35)"/>
+    <circle cx="14" cy="14" r="3" fill="white"/>
+  </svg>`;
+  const ghostIcon = L.divIcon({ html: ghostSvg, className: '', iconSize: [28,40], iconAnchor: [14,40] });
+  window.tempMarker = L.marker([lat, lng], { icon: ghostIcon, zIndexOffset: 500 }).addTo(map);
+
+  document.getElementById('lc-coords').textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  document.getElementById('location-confirm').classList.add('visible');
+}
+
+// ===================== GEOLOCATION =====================
+map.locate({ setView: true, maxZoom: 16 });
+map.on('locationfound', e => {
+  L.circleMarker(e.latlng, {
+    radius: 7, color: '#f5c400', fillColor: '#f5c400', fillOpacity: 0.8, weight: 2
+  }).addTo(map).bindTooltip('You are here', { direction: 'top' });
+});
+
+// ===================== INIT =====================
+renderAllPins();
+updateStats();
+</script>
+</body>
+</html>
